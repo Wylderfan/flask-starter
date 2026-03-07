@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Items — {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Items</h1>
+  <a href="{{ url_for('items.add') }}"
+     class="px-4 py-2 bg-indigo-700 hover:bg-indigo-600 rounded text-sm transition-colors">
+    + Add Item
+  </a>
+</div>
+
+{% if items %}
+  <div class="flex flex-col gap-2">
+    {% for item in items %}
+    <div class="bg-gray-900 rounded-lg flex items-center gap-4 px-4 py-3">
+      <div class="flex-1 min-w-0">
+        <p class="font-medium truncate">{{ item.name }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">Added {{ item.created_at.strftime('%Y-%m-%d') }}</p>
+      </div>
+      <a href="{{ url_for('items.edit', item_id=item.id) }}"
+         class="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors">
+        Edit
+      </a>
+      <form method="post" action="{{ url_for('items.delete', item_id=item.id) }}"
+            onsubmit="return confirm('Delete \'{{ item.name }}\'?')">
+        <button class="text-xs px-3 py-1.5 rounded bg-red-900 hover:bg-red-800 text-red-200 transition-colors">
+          Delete
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-gray-500">No items yet. <a href="{{ url_for('items.add') }}" class="text-indigo-400 hover:underline">Add one.</a></p>
+{% endif %}
+{% endblock %}
