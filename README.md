@@ -11,12 +11,34 @@ Forked and stripped from [game-journal](https://github.com/Wylderfan/game-journa
 - **App factory** pattern in `app/__init__.py`
 - **Blueprint structure** — `main` (dashboard + profile switcher) and `items` (example CRUD)
 - **Multi-profile support** — session-based, zero auth, profiles set via env var
-- **MySQL + SQLAlchemy** with a single example `Item` model to copy-paste from
-- **Dark Tailwind UI** — nav, flash messages, form pages — all consistent
-- **`flask seed`** — wipes and re-seeds example data
+- **MySQL + SQLAlchemy** with a fully-featured example `Item` model to copy-paste from
+- **Dark Tailwind UI** — nav, flash messages, form pages, stat cards — all consistent
+- **`flask seed`** — wipes and re-seeds 6 varied example items so every pattern is visible on first load
 - **`flask db-backup` / `flask db-restore`** — mysqldump wrappers
 - **Tailscale binding** — `run.py` binds to `TAILSCALE_IP`, never `0.0.0.0`
 - **Deploy templates** — systemd and OpenRC in `deploy/`
+- **`PATTERNS.md`** — quick-reference cheat sheet for every pattern in the codebase
+
+---
+
+## Patterns included
+
+| Pattern | Where to find it |
+|---|---|
+| Required text input | `items/add.html`, `items/edit.html` |
+| Optional textarea | `items/add.html`, `items/edit.html` — `description` field |
+| Star rating widget | `items/add.html` (empty), `items/edit.html` (pre-filled), JS in `base.html` |
+| Enum / status badge | `models.py` `status` field, badge rendering in `items/index.html` |
+| Filter bar (query params) | `blueprints/items.py` `index()`, filter buttons in `items/index.html` |
+| Select dropdown | `items/add.html` and `items/edit.html` — `status` field |
+| Free-text category tag | `models.py` `category` field, tag pill in `items/index.html` |
+| Stat cards | `blueprints/main.py`, `main/index.html` |
+| Recent-items list | `blueprints/main.py`, `main/index.html` |
+| Flash messages | `base.html` (rendering), any route (sending) |
+| Profile scoping | Every route in `items.py` — `filter_by(profile_id=profile)` |
+| CRUD blueprint | `blueprints/items.py` — copy this whole file |
+
+See **`PATTERNS.md`** for step-by-step copy-paste instructions for each pattern.
 
 ---
 
@@ -37,7 +59,7 @@ cp .env.example .env
 | Variable | Description |
 |---|---|
 | `FLASK_SECRET_KEY` | Any random string |
-| `DATABASE_URL` | `mysql+pymysql://user:password@host/dbname` |
+| `DATABASE_URL` | `mysql+pymysql://user:password@host/dbname` (or `sqlite:///dev.db` for local testing) |
 | `FLASK_ENV` | `development` locally, `production` on server |
 | `APP_NAME` | Displayed in nav and page titles (default: `My App`) |
 | `TAILSCALE_IP` | Your Tailscale IP (`tailscale ip -4`) |
@@ -52,7 +74,7 @@ flask shell
 >>> db.create_all()
 ```
 
-Seed with example items:
+Seed with example items (6 per profile, with varied statuses/priorities/categories):
 
 ```bash
 flask seed
@@ -66,9 +88,15 @@ python run.py
 
 ---
 
+## Local testing without MySQL
+
+Set `DATABASE_URL=sqlite:///dev.db` in `.env`. SQLite needs no server and works as a drop-in for local development. All seed and CRUD operations work identically.
+
+---
+
 ## Adding a blueprint
 
-1. Create `app/blueprints/myfeature.py` with a `Blueprint`:
+1. Create `app/blueprints/myfeature.py` — copy `items.py` and rename throughout:
 
 ```python
 from flask import Blueprint, render_template
@@ -111,7 +139,23 @@ class Widget(db.Model):
                            onupdate=datetime.utcnow)
 ```
 
-Then recreate tables (`db.create_all()` is safe to re-run — it skips existing tables) or use a migration.
+See `app/models.py` — the `Item` model has a comment on each field explaining the pattern it demonstrates.
+
+Then run `db.create_all()` in a flask shell (safe to re-run — skips existing tables).
+
+---
+
+## The Item model fields
+
+The example `Item` model uses four field types to demonstrate common patterns:
+
+| Field | Type | Pattern demonstrated |
+|---|---|---|
+| `name` | `String(200)` | Required text input |
+| `description` | `Text`, nullable | Optional textarea |
+| `priority` | `Integer`, nullable | Star rating (1–5, None = not rated) |
+| `status` | `Enum` | Status badge with color-coding |
+| `category` | `String(100)`, nullable | Free-text grouping / tag |
 
 ---
 
@@ -130,7 +174,18 @@ from app.utils.helpers import current_profile
 profile = current_profile()  # "Alice"
 ```
 
-All data queries should filter by `profile_id=profile`. The profile switcher in the nav is rendered automatically when more than one profile is configured.
+All data queries filter by `profile_id=profile`. The profile switcher in the nav is rendered automatically when more than one profile is configured.
+
+---
+
+## Filter bar pattern
+
+The items list supports `?status=Active` / `?status=Done` / `?status=Archived` query params. Copy this pattern to any list page:
+
+1. In the route: read `request.args.get("status")` and apply `.filter_by(status=...)` conditionally
+2. In the template: render filter buttons as links to `url_for('items.index', status=label)`
+
+See `app/blueprints/items.py` `index()` and `app/templates/items/index.html` for the full implementation.
 
 ---
 
@@ -156,7 +211,7 @@ Requires `mysqldump` / `mysql` client tools installed on the system.
 
 ## Tailscale binding
 
-`run.py` reads `TAILSCALE_IP` from `.env` and binds gunicorn to that address. This means the app is only reachable from your Tailnet — no login system needed.
+`run.py` reads `TAILSCALE_IP` from `.env` and binds to that address. This means the app is only reachable from your Tailnet — no login system needed.
 
 Get your Tailscale IP: `tailscale ip -4`
 
@@ -190,3 +245,4 @@ sudo rc-service flask-starter start
 - **`db.create_all()` creates no tables** if models haven't been imported first. The app factory handles this at runtime with `from app import models`. In a raw shell, do `from app import db, models` before `db.create_all()`.
 - **`flask seed` wipes all data** before re-inserting. Do not run against a database with real data you want to keep.
 - **MySQL lock wait timeout** in `flask shell` if a previous session left an open transaction. Exit all shells, wait a moment, retry.
+- **SQLite doesn't enforce Enum values** at the DB level — validation in the route handles this instead.
